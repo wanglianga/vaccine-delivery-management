@@ -8,6 +8,9 @@ import type {
   ReturnTask,
   ClinicInventory,
   QuantityConfirmation,
+  DistributionRecommendation,
+  SkippedBatchReview,
+  BatchAdjustmentRecord,
 } from '@/types'
 import {
   mockBatches,
@@ -164,6 +167,62 @@ function mapConfirmation(raw: any): QuantityConfirmation {
     warehouseConfirmed: raw.warehouseConfirmed,
     clinicConfirmed: raw.clinicConfirmed,
     status: raw.status?.toLowerCase() || 'pending_both',
+    createdAt: raw.createdAt,
+  }
+}
+
+function mapRecommendation(raw: any): DistributionRecommendation {
+  return {
+    id: String(raw.id),
+    batchId: String(raw.batchId),
+    batchNo: raw.batchNo,
+    vaccineName: raw.vaccineName,
+    recommendedOrder: raw.recommendedOrder,
+    expiryScore: raw.expiryScore,
+    appointmentScore: raw.appointmentScore,
+    inventoryScore: raw.inventoryScore,
+    distanceScore: raw.distanceScore,
+    capacityScore: raw.capacityScore,
+    totalScore: raw.totalScore,
+    daysToExpiry: raw.daysToExpiry,
+    appointmentCount: raw.appointmentCount,
+    targetClinic: raw.targetClinic,
+    distanceKm: raw.distanceKm,
+    coldChainBoxRemaining: raw.coldChainBoxRemaining,
+    createdAt: raw.createdAt,
+    createdBy: raw.createdBy,
+  }
+}
+
+function mapSkippedReview(raw: any): SkippedBatchReview {
+  return {
+    id: String(raw.id),
+    batchId: String(raw.batchId),
+    batchNo: raw.batchNo,
+    vaccineName: raw.vaccineName,
+    skipReason: raw.skipReason,
+    skippedBy: raw.skippedBy,
+    skippedAt: raw.skippedAt,
+    targetStatus: raw.targetStatus?.toLowerCase() || 'pending_arrangement',
+    reviewComment: raw.reviewComment,
+    reviewedBy: raw.reviewedBy,
+    reviewedAt: raw.reviewedAt,
+    reviewed: raw.reviewed,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  }
+}
+
+function mapAdjustmentRecord(raw: any): BatchAdjustmentRecord {
+  return {
+    id: String(raw.id),
+    batchId: String(raw.batchId),
+    batchNo: raw.batchNo,
+    recommendedOrder: raw.recommendedOrder,
+    actualOrder: raw.actualOrder,
+    skipReason: raw.skipReason,
+    adjustedBy: raw.adjustedBy,
+    affectedClinics: raw.affectedClinics,
     createdAt: raw.createdAt,
   }
 }
@@ -522,6 +581,90 @@ export function useApi() {
     }
   }
 
+  async function getDistributionRecommendations(vaccineName?: string): Promise<DistributionRecommendation[]> {
+    const useReal = await checkBackend()
+    if (!useReal) return []
+    try {
+      const url = vaccineName ? `/distribution-recommendations?vaccineName=${encodeURIComponent(vaccineName)}` : '/distribution-recommendations'
+      const raw = await fetchJson<any[]>(url)
+      return raw.map(mapRecommendation)
+    } catch {
+      return []
+    }
+  }
+
+  async function generateDistributionRecommendations(params: {
+    vaccineName?: string
+    targetClinic?: string
+    distanceKm?: number
+    coldChainBoxCapacity?: number
+    coldChainBoxUsed?: number
+    batchIds?: string[]
+    operator?: string
+  }): Promise<DistributionRecommendation[]> {
+    const useReal = await checkBackend()
+    if (!useReal) return []
+    try {
+      const raw = await postJson<any[]>('/distribution-recommendations/generate', params)
+      return raw.map(mapRecommendation)
+    } catch {
+      return []
+    }
+  }
+
+  async function getPendingSkippedReviews(): Promise<SkippedBatchReview[]> {
+    const useReal = await checkBackend()
+    if (!useReal) return []
+    try {
+      const raw = await fetchJson<any[]>('/skipped-batch-reviews/pending')
+      return raw.map(mapSkippedReview)
+    } catch {
+      return []
+    }
+  }
+
+  async function skipNearExpiryBatch(params: {
+    skippedBatchId: string
+    selectedBatchId: string
+    skipReason: string
+    targetStatus: string
+    skippedBy: string
+    affectedClinics?: string
+  }): Promise<SkippedBatchReview> {
+    const useReal = await checkBackend()
+    const raw = await postJson<any>('/skipped-batch-reviews', params)
+    return mapSkippedReview(raw)
+  }
+
+  async function reviewSkippedBatch(reviewId: string, params: {
+    reviewComment: string
+    reviewedBy: string
+    approved: boolean
+  }): Promise<SkippedBatchReview> {
+    const raw = await putJson<any>(`/skipped-batch-reviews/${reviewId}/review`, params)
+    return mapSkippedReview(raw)
+  }
+
+  async function getBatchAdjustmentRecords(batchId: string): Promise<BatchAdjustmentRecord[]> {
+    const useReal = await checkBackend()
+    if (!useReal) return []
+    try {
+      const raw = await fetchJson<any[]>(`/batch-adjustment-records/batch/${batchId}`)
+      return raw.map(mapAdjustmentRecord)
+    } catch {
+      return []
+    }
+  }
+
+  async function updateBatchStatus(batchId: string, params: {
+    status: string
+    operator: string
+    remark?: string
+  }): Promise<VaccineBatch> {
+    const raw = await putJson<any>(`/batches/${batchId}/status`, params)
+    return mapBatch(raw)
+  }
+
   return {
     loading,
     error,
@@ -540,5 +683,12 @@ export function useApi() {
     getEvidenceGaps,
     getReturnTasks,
     getClinicInventory,
+    getDistributionRecommendations,
+    generateDistributionRecommendations,
+    getPendingSkippedReviews,
+    skipNearExpiryBatch,
+    reviewSkippedBatch,
+    getBatchAdjustmentRecords,
+    updateBatchStatus,
   }
 }

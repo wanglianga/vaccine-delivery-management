@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -15,54 +14,45 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "vaccine_batches")
-public class VaccineBatch {
+@Table(name = "skipped_batch_reviews")
+public class SkippedBatchReview {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
+    private Long batchId;
+
+    @Column(nullable = false)
     private String batchNo;
 
     @Column(nullable = false)
     private String vaccineName;
 
     @Column(nullable = false)
-    private String manufacturer;
+    private String skipReason;
 
     @Column(nullable = false)
-    private String specification;
+    private String skippedBy;
 
     @Column(nullable = false)
-    private LocalDate expiryDate;
-
-    @Column(nullable = false)
-    private String storageTempZone;
-
-    @Column(nullable = false)
-    private String batchReleaseDoc;
-
-    @Column(nullable = false)
-    private Integer totalQty;
-
-    @Column(nullable = false)
-    private Integer distributableQty;
+    private LocalDateTime skippedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private BatchStatus status;
+    private BatchStatus targetStatus;
+
+    private String reviewComment;
+
+    private String reviewedBy;
+
+    private LocalDateTime reviewedAt;
+
+    @Column(nullable = false)
+    private Boolean reviewed;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(nullable = false)
     private LocalDateTime updatedAt;
-
-    private Integer recommendedOrder;
-
-    private String lastAdjustedBy;
-
-    private LocalDateTime lastAdjustedAt;
-
-    private String affectedClinics;
 }

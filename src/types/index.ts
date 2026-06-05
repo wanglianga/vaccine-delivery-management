@@ -9,7 +9,11 @@ export interface VaccineBatch {
   batchReleaseDoc: string
   distributableQty: number
   totalQty: number
-  status: 'available' | 'partial' | 'exhausted' | 'expired'
+  status: 'available' | 'partial' | 'exhausted' | 'expired' | 'pending_arrangement' | 'pending_report_loss' | 'pending_transfer' | 'under_review'
+  recommendedOrder?: number
+  lastAdjustedBy?: string
+  lastAdjustedAt?: string
+  affectedClinics?: string
   createdAt: string
   updatedAt: string
 }
@@ -167,4 +171,65 @@ export const RETURN_TASK_STATUS_MAP: Record<ReturnTask['status'], { label: strin
   in_return: { label: '回库中', color: 'blue' },
   returned: { label: '已回库', color: 'green' },
   disposed: { label: '已销毁', color: 'red' },
+}
+
+export interface DistributionRecommendation {
+  id: string
+  batchId: string
+  batchNo: string
+  vaccineName: string
+  recommendedOrder: number
+  expiryScore: number
+  appointmentScore: number
+  inventoryScore: number
+  distanceScore: number
+  capacityScore: number
+  totalScore: number
+  daysToExpiry: number
+  appointmentCount: number
+  targetClinic?: string
+  distanceKm?: number
+  coldChainBoxRemaining?: number
+  createdAt: string
+  createdBy?: string
+}
+
+export interface SkippedBatchReview {
+  id: string
+  batchId: string
+  batchNo: string
+  vaccineName: string
+  skipReason: string
+  skippedBy: string
+  skippedAt: string
+  targetStatus: string
+  reviewComment?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  reviewed: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface BatchAdjustmentRecord {
+  id: string
+  batchId: string
+  batchNo: string
+  recommendedOrder: number
+  actualOrder: number
+  skipReason?: string
+  adjustedBy?: string
+  affectedClinics?: string
+  createdAt: string
+}
+
+export const BATCH_STATUS_MAP: Record<VaccineBatch['status'], { label: string; color: string }> = {
+  available: { label: '可配送', color: 'green' },
+  partial: { label: '部分配送', color: 'yellow' },
+  exhausted: { label: '已配完', color: 'gray' },
+  expired: { label: '已过期', color: 'red' },
+  pending_arrangement: { label: '待安排', color: 'orange' },
+  pending_report_loss: { label: '待报损', color: 'red' },
+  pending_transfer: { label: '待转配', color: 'purple' },
+  under_review: { label: '复核中', color: 'blue' },
 }
