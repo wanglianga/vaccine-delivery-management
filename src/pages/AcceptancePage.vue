@@ -39,6 +39,8 @@ const {
   acceptDelivery,
   rejectDelivery,
   confirmQuantity,
+  acknowledgeGap,
+  resumeInbound,
   getEvidenceGaps,
   getReturnTasks,
   getClinicInventory,
@@ -143,7 +145,7 @@ async function handleConfirmClinicQty() {
 
 async function handleAcknowledgeGap() {
   if (!selectedRecord.value) return
-  selectedRecord.value.status = 'pending'
+  await acknowledgeGap(selectedRecord.value.id)
   await loadData()
   const updated = records.value.find(r => r.id === selectedRecord.value!.id)
   if (updated) selectedRecord.value = { ...updated }
@@ -151,8 +153,7 @@ async function handleAcknowledgeGap() {
 
 async function handleResumeInbound() {
   if (!selectedRecord.value) return
-  selectedRecord.value.tempCurveOk = true
-  selectedRecord.value.status = 'pending'
+  await resumeInbound(selectedRecord.value.id)
   await loadData()
   const updated = records.value.find(r => r.id === selectedRecord.value!.id)
   if (updated) selectedRecord.value = { ...updated }

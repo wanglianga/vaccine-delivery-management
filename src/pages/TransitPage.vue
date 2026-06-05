@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Truck, Wifi, WifiOff, AlertTriangle, RefreshCw, Eye } from 'lucide-vue-next'
+import { Truck, Wifi, WifiOff, AlertTriangle, RefreshCw, Eye, Send, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import DataTable from '@/components/DataTable.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TempChart from '@/components/TempChart.vue'
@@ -19,7 +19,7 @@ import {
   EVIDENCE_GAP_STATUS_MAP,
 } from '@/types'
 
-const { getDistributionOrders, getTransitReports, getEvidenceGaps } = useApi()
+const { getDistributionOrders, getTransitReports, submitTransitReport, getEvidenceGaps } = useApi()
 
 const orders = ref<DistributionOrder[]>([])
 const reports = ref<TransitReport[]>([])
@@ -27,6 +27,19 @@ const evidenceGaps = ref<TemperatureEvidenceGap[]>([])
 const selectedOrder = ref<DistributionOrder | null>(null)
 const detailModalVisible = ref(false)
 const detailReport = ref<TransitReport | null>(null)
+
+const showReportForm = ref(false)
+const submitting = ref(false)
+const reportForm = ref({
+  temperature: 5.0,
+  latitude: 31.2304,
+  longitude: 121.4737,
+  locationDesc: '',
+  stopPoint: '',
+  boxOpenRecord: '',
+  probeStatus: 'online',
+  probeBatteryLevel: 95,
+})
 
 const transitOrders = computed(() =>
   orders.value.filter(o => o.status === 'in_transit' || o.status === 'outbound')
@@ -90,11 +103,44 @@ async function loadData() {
 function handleOrderSelect(order: DistributionOrder) {
   selectedOrder.value = order
   tempData.value = generateTempCurve(4, 8, 3)
+  showReportForm.value = false
 }
 
 function handleReportRowClick(report: TransitReport) {
   detailReport.value = report
   detailModalVisible.value = true
+}
+
+async function handleSubmitReport() {
+  if (!selectedOrder.value) return
+  submitting.value = true
+  try {
+    await submitTransitReport({
+      distributionOrderId: selectedOrder.value.id,
+      temperature: reportForm.value.temperature,
+      latitude: reportForm.value.latitude,
+      longitude: reportForm.value.longitude,
+      locationDesc: reportForm.value.locationDesc,
+      stopPoint: reportForm.value.stopPoint || null,
+      boxOpenRecord: reportForm.value.boxOpenRecord || null,
+      probeStatus: reportForm.value.probeStatus,
+      probeBatteryLevel: reportForm.value.probeBatteryLevel,
+    })
+    await loadData()
+    reportForm.value = {
+      temperature: 5.0,
+      latitude: 31.2304,
+      longitude: 121.4737,
+      locationDesc: '',
+      stopPoint: '',
+      boxOpenRecord: '',
+      probeStatus: 'online',
+      probeBatteryLevel: 95,
+    }
+    showReportForm.value = false
+  } finally {
+    submitting.value = false
+  }
 }
 
 function formatTime(iso: string) {
@@ -156,7 +202,70 @@ onMounted(loadData)
           </div>
 
           <div class="card">
-            <h2 class="section-title mb-4">在途报告</h2>
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="section-title">在途报告</h2>
+              <button
+                class="btn-primary btn-sm"
+                @click="showReportForm = !showReportForm"
+              >
+                <Send class="w-3.5 h-3.5 mr-1" />
+                上报运输数据
+                <component :is="showReportForm ? ChevronUp : ChevronDown" class="w-3.5 h-3.5 ml-1" />
+              </button>
+            </div>
+
+            <div v-if="showReportForm" class="mb-4 p-4 bg-blue-50/50 border border-blue-100 rounded-lg">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="form-label">温度 (°C)</label>
+                  <input v-model.number="reportForm.temperature" type="number" step="0.1" class="form-input" />
+                </div>
+                <div>
+                  <label class="form-label">探头状态</label>
+                  <select v-model="reportForm.probeStatus" class="form-input">
+                    <option value="online">在线</option>
+                    <option value="offline">离线</option>
+                    <option value="low_battery">低电量</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">纬度</label>
+                  <input v-model.number="reportForm.latitude" type="number" step="0.0001" class="form-input" />
+                </div>
+                <div>
+                  <label class="form-label">经度</label>
+                  <input v-model.number="reportForm.longitude" type="number" step="0.0001" class="form-input" />
+                </div>
+                <div class="col-span-2">
+                  <label class="form-label">位置描述</label>
+                  <input v-model="reportForm.locationDesc" type="text" class="form-input" placeholder="如：G15沈海高速苏州段" />
+                </div>
+                <div>
+                  <label class="form-label">停留点</label>
+                  <input v-model="reportForm.stopPoint" type="text" class="form-input" placeholder="如：苏州服务区（选填）" />
+                </div>
+                <div>
+                  <label class="form-label">开箱记录</label>
+                  <input v-model="reportForm.boxOpenRecord" type="text" class="form-input" placeholder="如：苏州站开箱检查（选填）" />
+                </div>
+                <div>
+                  <label class="form-label">探头电量 (%)</label>
+                  <input v-model.number="reportForm.probeBatteryLevel" type="number" min="0" max="100" class="form-input" />
+                </div>
+              </div>
+              <div class="flex items-center gap-2 mt-3">
+                <button
+                  class="btn-primary"
+                  :disabled="submitting || !reportForm.locationDesc.trim()"
+                  @click="handleSubmitReport"
+                >
+                  <Send class="w-4 h-4 mr-1" />
+                  {{ submitting ? '提交中...' : '提交上报' }}
+                </button>
+                <button class="btn-secondary" @click="showReportForm = false">取消</button>
+              </div>
+            </div>
+
             <DataTable
               :columns="reportColumns"
               :data="orderReports"

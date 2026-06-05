@@ -122,7 +122,7 @@ function mapGap(raw: any): TemperatureEvidenceGap {
     probeNo: raw.probeNo,
     offlineAt: raw.offlineAt,
     backOnlineAt: raw.backOnlineAt,
-    duration: raw.durationMinutes,
+    duration: raw.duration,
     status: raw.status?.toLowerCase() || 'open',
     description: raw.description,
   }
@@ -409,6 +409,97 @@ export function useApi() {
     }
   }
 
+  async function submitTransitReport(report: {
+    distributionOrderId: string
+    temperature: number
+    latitude: number
+    longitude: number
+    locationDesc: string
+    stopPoint: string | null
+    boxOpenRecord: string | null
+    probeStatus: string
+    probeBatteryLevel: number
+  }): Promise<TransitReport> {
+    const useReal = await checkBackend()
+    if (!useReal) {
+      const newReport: TransitReport = {
+        id: 'TR' + String(mockTransitReports.length + 1).padStart(3, '0'),
+        distributionOrderId: report.distributionOrderId,
+        orderNo: '',
+        reportTime: new Date().toISOString(),
+        temperature: report.temperature,
+        latitude: report.latitude,
+        longitude: report.longitude,
+        locationDesc: report.locationDesc,
+        stopPoint: report.stopPoint,
+        boxOpenRecord: report.boxOpenRecord,
+        probeStatus: report.probeStatus as TransitReport['probeStatus'],
+        probeBatteryLevel: report.probeBatteryLevel,
+      }
+      if (report.probeStatus === 'offline') {
+        const order = mockDistributionOrders.find(o => o.id === report.distributionOrderId)
+        const newGap: TemperatureEvidenceGap = {
+          id: 'G' + String(mockEvidenceGaps.length + 1).padStart(3, '0'),
+          distributionOrderId: report.distributionOrderId,
+          orderNo: order?.orderNo || '',
+          probeNo: order?.tempProbeNo || '',
+          offlineAt: new Date().toISOString(),
+          backOnlineAt: null,
+          duration: null,
+          status: 'open',
+          description: '探头' + (order?.tempProbeNo || '') + '离线，温度数据缺失',
+        }
+        mockEvidenceGaps.push(newGap)
+      }
+      mockTransitReports.push(newReport)
+      return newReport
+    }
+    const raw = await postJson<any>('/transit-reports', {
+      distributionOrderId: Number(report.distributionOrderId),
+      temperature: report.temperature,
+      latitude: report.latitude,
+      longitude: report.longitude,
+      locationDesc: report.locationDesc,
+      stopPoint: report.stopPoint,
+      boxOpenRecord: report.boxOpenRecord,
+      probeStatus: report.probeStatus.toUpperCase(),
+      probeBatteryLevel: report.probeBatteryLevel,
+    })
+    return mapTransitReport(raw)
+  }
+
+  async function acknowledgeGap(recordId: string): Promise<AcceptanceRecord> {
+    const useReal = await checkBackend()
+    if (!useReal) {
+      const record = mockAcceptanceRecords.find(r => r.id === recordId)
+      if (record) {
+        record.status = 'pending'
+        record.updatedAt = new Date().toISOString()
+        mockEvidenceGaps
+          .filter(g => g.distributionOrderId === record.distributionOrderId && g.status !== 'acknowledged')
+          .forEach(g => { g.status = 'acknowledged' })
+      }
+      return record!
+    }
+    const raw = await putJson<any>(`/acceptance-records/${recordId}/acknowledge-gap`, {})
+    return mapAcceptance(raw)
+  }
+
+  async function resumeInbound(recordId: string): Promise<AcceptanceRecord> {
+    const useReal = await checkBackend()
+    if (!useReal) {
+      const record = mockAcceptanceRecords.find(r => r.id === recordId)
+      if (record) {
+        record.tempCurveOk = true
+        record.status = 'pending'
+        record.updatedAt = new Date().toISOString()
+      }
+      return record!
+    }
+    const raw = await putJson<any>(`/acceptance-records/${recordId}/resume-inbound`, {})
+    return mapAcceptance(raw)
+  }
+
   async function getReturnTasks(): Promise<ReturnTask[]> {
     const useReal = await checkBackend()
     if (!useReal) return mockReturnTasks
@@ -439,10 +530,13 @@ export function useApi() {
     getDistributionOrders,
     createDistributionOrder,
     getTransitReports,
+    submitTransitReport,
     getAcceptanceRecords,
     acceptDelivery,
     rejectDelivery,
     confirmQuantity,
+    acknowledgeGap,
+    resumeInbound,
     getEvidenceGaps,
     getReturnTasks,
     getClinicInventory,

@@ -207,6 +207,14 @@ public class DataInitializer implements CommandLineRunner {
                 .status(AcceptanceStatus.EVIDENCE_GAP)
                 .createdAt(now.minusMinutes(30)).updatedAt(now.minusMinutes(30)).build());
 
+        acceptanceRepository.save(AcceptanceRecord.builder()
+                .distributionOrderId(d1.getId()).orderNo(d1.getOrderNo())
+                .batchNo(d1.getBatchNo()).vaccineName(d1.getVaccineName())
+                .sentQty(200).receivedQty(200)
+                .sealIntact(true).tempCurveOk(false)
+                .status(AcceptanceStatus.TEMP_GAP)
+                .createdAt(now.minusMinutes(20)).updatedAt(now.minusMinutes(20)).build());
+
         gapRepository.save(TemperatureEvidenceGap.builder()
                 .distributionOrderId(d2.getId()).orderNo(d2.getOrderNo())
                 .probeNo("TP-002")

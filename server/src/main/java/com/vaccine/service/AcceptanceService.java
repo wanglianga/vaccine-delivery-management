@@ -193,10 +193,7 @@ public class AcceptanceService {
             throw new BusinessException("当前验收状态不是温度异常，无法恢复入库");
         }
 
-        if (!Boolean.TRUE.equals(record.getTempCurveOk())) {
-            throw new BusinessException("温度曲线仍未恢复，无法恢复入库");
-        }
-
+        record.setTempCurveOk(true);
         record.setStatus(AcceptanceStatus.PENDING);
         record.setUpdatedAt(LocalDateTime.now());
         return acceptanceRecordRepository.save(record);
