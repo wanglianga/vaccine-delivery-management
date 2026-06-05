@@ -9,6 +9,7 @@ import {
   ThermometerSun,
   ChevronLeft,
   Menu,
+  GitBranch,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -17,6 +18,7 @@ const collapsed = ref(false)
 
 const navItems = [
   { path: '/batches', label: '批次管理', icon: Package, role: 'CDC' },
+  { path: '/split', label: '拆分配送', icon: GitBranch, role: '仓库' },
   { path: '/distribution', label: '配送管理', icon: Truck, role: '仓库' },
   { path: '/transit', label: '在途监控', icon: MapPin, role: '车队' },
   { path: '/acceptance', label: '验收管理', icon: ClipboardCheck, role: '门诊' },

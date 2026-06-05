@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Plus, FileText, Search, AlertTriangle, Clock } from 'lucide-vue-next'
+import { Plus, FileText, Search, AlertTriangle, Clock, Package, ChevronDown, ChevronRight, Truck, Thermometer, ShieldAlert } from 'lucide-vue-next'
 import DataTable from '@/components/DataTable.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import Modal from '@/components/Modal.vue'
 import { useApi } from '@/composables/useApi'
-import type { VaccineBatch, BatchAdjustmentRecord } from '@/types'
-import { BATCH_STATUS_MAP, TEMP_ZONE_OPTIONS } from '@/types'
+import type { VaccineBatch, BatchAdjustmentRecord, ColdChainBox, TransitSegment, BoxAcceptanceRecord } from '@/types'
+import { BATCH_STATUS_MAP, TEMP_ZONE_OPTIONS, BOX_STATUS_MAP, SEGMENT_STATUS_MAP, ACCEPTANCE_STATUS_MAP } from '@/types'
 
-const { getBatches, createBatch, loading, getBatchAdjustmentRecords } = useApi()
+const { getBatches, createBatch, loading, getBatchAdjustmentRecords, getColdChainBoxes, getBoxSegments, getBoxAcceptance } = useApi()
 
 const batches = ref<VaccineBatch[]>([])
 const searchQuery = ref('')
@@ -16,6 +16,10 @@ const showCreateModal = ref(false)
 const showDetailModal = ref(false)
 const selectedBatch = ref<VaccineBatch | null>(null)
 const adjustmentRecords = ref<BatchAdjustmentRecord[]>([])
+const coldChainBoxes = ref<ColdChainBox[]>([])
+const expandedBoxIds = ref<Set<string>>(new Set())
+const boxSegmentsMap = ref<Map<string, TransitSegment[]>>(new Map())
+const boxAcceptanceMap = ref<Map<string, BoxAcceptanceRecord>>(new Map())
 
 const newBatch = ref({
   batchNo: '',
@@ -77,7 +81,37 @@ async function loadBatches() {
 async function handleRowClick(row: VaccineBatch) {
   selectedBatch.value = row
   adjustmentRecords.value = await getBatchAdjustmentRecords(row.id)
+  coldChainBoxes.value = await getColdChainBoxes(row.id)
+  expandedBoxIds.value = new Set()
+  boxSegmentsMap.value = new Map()
+  boxAcceptanceMap.value = new Map()
   showDetailModal.value = true
+}
+
+async function toggleBoxExpand(box: ColdChainBox) {
+  if (expandedBoxIds.value.has(box.id)) {
+    expandedBoxIds.value.delete(box.id)
+  } else {
+    expandedBoxIds.value.add(box.id)
+    if (!boxSegmentsMap.value.has(box.id)) {
+      const [segments, acceptance] = await Promise.all([
+        getBoxSegments(box.id),
+        getBoxAcceptance(box.id),
+      ])
+      boxSegmentsMap.value.set(box.id, segments)
+      boxAcceptanceMap.value.set(box.id, acceptance)
+    }
+  }
+  expandedBoxIds.value = new Set(expandedBoxIds.value)
+}
+
+function getBoxStats(boxes: ColdChainBox[]) {
+  const total = boxes.length
+  const inTransit = boxes.filter(b => b.status === 'in_transit' || b.status === 'transferring' || b.status === 'outbound').length
+  const accepted = boxes.filter(b => b.status === 'accepted').length
+  const delayed = boxes.filter(b => b.status === 'delayed').length
+  const rejected = boxes.filter(b => b.status === 'rejected').length
+  return { total, inTransit, accepted, delayed, rejected }
 }
 
 function openCreateModal() {
@@ -254,8 +288,8 @@ onMounted(loadBatches)
       </form>
     </Modal>
 
-    <Modal title="批次详情" :visible="showDetailModal" width="720px" @close="showDetailModal = false">
-      <div v-if="selectedBatch" class="space-y-5">
+    <Modal title="批次详情" :visible="showDetailModal" width="900px" @close="showDetailModal = false">
+      <div v-if="selectedBatch" class="space-y-5 max-h-[70vh] overflow-y-auto">
         <div class="grid grid-cols-2 gap-x-6 gap-y-3">
           <div>
             <div class="text-xs text-gray-500 mb-0.5">批次号</div>
@@ -319,6 +353,187 @@ onMounted(loadBatches)
           <div v-if="selectedBatch.affectedClinics" class="col-span-2">
             <div class="text-xs text-gray-500 mb-0.5">影响的门诊预约</div>
             <div class="text-sm font-medium text-gray-800">{{ selectedBatch.affectedClinics }}</div>
+          </div>
+        </div>
+
+        <div v-if="coldChainBoxes.length > 0" class="border-t pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Package class="w-4 h-4" />
+              拆分配送冷链箱
+            </h4>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="text-gray-500">共 <span class="font-medium text-gray-700">{{ getBoxStats(coldChainBoxes).total }}</span> 箱</span>
+              <span class="text-yellow-600">在途 <span class="font-medium">{{ getBoxStats(coldChainBoxes).inTransit }}</span></span>
+              <span class="text-green-600">已验收 <span class="font-medium">{{ getBoxStats(coldChainBoxes).accepted }}</span></span>
+              <span class="text-orange-600">延误 <span class="font-medium">{{ getBoxStats(coldChainBoxes).delayed }}</span></span>
+              <span class="text-red-600">拒收 <span class="font-medium">{{ getBoxStats(coldChainBoxes).rejected }}</span></span>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="box in coldChainBoxes"
+              :key="box.id"
+              class="border rounded-lg overflow-hidden"
+            >
+              <div
+                class="flex items-center gap-3 px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                @click="toggleBoxExpand(box)"
+              >
+                <component
+                  :is="expandedBoxIds.has(box.id) ? ChevronDown : ChevronRight"
+                  class="w-4 h-4 text-gray-400 flex-shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-3">
+                    <span class="text-sm font-medium text-gray-800">{{ box.boxNo }}</span>
+                    <StatusBadge :status="box.status" :status-map="BOX_STATUS_MAP" size="sm" />
+                  </div>
+                  <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                    <span>目标门诊: {{ box.targetClinic }}</span>
+                    <span>数量: {{ box.quantity }}</span>
+                    <span v-if="box.currentVehicleNo">车辆: {{ box.currentVehicleNo }}</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                  <div class="flex items-center gap-1 text-gray-500">
+                    <Thermometer class="w-3.5 h-3.5" />
+                    {{ box.tempProbeNo }}
+                  </div>
+                  <div class="flex items-center gap-1 text-gray-500">
+                    <ShieldAlert class="w-3.5 h-3.5" />
+                    {{ box.sealNo }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="expandedBoxIds.has(box.id)" class="px-4 py-3 border-t bg-white">
+                <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div>
+                    <span class="text-gray-500">配送单号:</span>
+                    <span class="ml-2 text-gray-800">{{ box.orderNo }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">当前司机:</span>
+                    <span class="ml-2 text-gray-800">{{ box.currentDriverName || '-' }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">司机电话:</span>
+                    <span class="ml-2 text-gray-800">{{ box.currentDriverPhone || '-' }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">转运交接点:</span>
+                    <span class="ml-2 text-gray-800">{{ box.transferPoint || '-' }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">预计到达:</span>
+                    <span class="ml-2 text-gray-800">{{ box.estimatedArrivalTime || '-' }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">实际到达:</span>
+                    <span class="ml-2 text-gray-800">{{ box.actualArrivalTime || '-' }}</span>
+                  </div>
+                </div>
+
+                <div v-if="box.exceptionRemark" class="mt-3 p-3 bg-orange-50 rounded-lg">
+                  <div class="text-xs font-medium text-orange-700 mb-1">异常备注</div>
+                  <div class="text-sm text-orange-800">{{ box.exceptionRemark }}</div>
+                  <div v-if="box.responsibleParty" class="text-xs text-orange-600 mt-1">
+                    责任方: {{ box.responsibleParty }}
+                  </div>
+                </div>
+
+                <div v-if="boxSegmentsMap.get(box.id)?.length" class="mt-3">
+                  <div class="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1">
+                    <Truck class="w-3.5 h-3.5" />
+                    转运记录
+                  </div>
+                  <div class="space-y-2">
+                    <div
+                      v-for="(segment, idx) in boxSegmentsMap.get(box.id)"
+                      :key="segment.id"
+                      class="flex items-start gap-3"
+                    >
+                      <div class="flex flex-col items-center">
+                        <div
+                          class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium"
+                          :class="{
+                            'bg-green-100 text-green-700': segment.status === 'completed',
+                            'bg-blue-100 text-blue-700': segment.status === 'in_progress',
+                            'bg-orange-100 text-orange-700': segment.status === 'delayed',
+                            'bg-gray-100 text-gray-600': segment.status === 'pending',
+                          }"
+                        >
+                          {{ idx + 1 }}
+                        </div>
+                        <div v-if="idx < (boxSegmentsMap.get(box.id)?.length || 0) - 1" class="w-0.5 h-8 bg-gray-200"></div>
+                      </div>
+                      <div class="flex-1 pb-3">
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm font-medium text-gray-800">{{ segment.fromPoint }} → {{ segment.toPoint }}</span>
+                          <StatusBadge :status="segment.status" :status-map="SEGMENT_STATUS_MAP" size="sm" />
+                        </div>
+                        <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          <span>车辆: {{ segment.vehicleNo }}</span>
+                          <span>司机: {{ segment.driverName }}</span>
+                        </div>
+                        <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          <span v-if="segment.departTime">出发: {{ segment.departTime }}</span>
+                          <span v-if="segment.actualArrivalTime">到达: {{ segment.actualArrivalTime }}</span>
+                        </div>
+                        <div v-if="segment.delayReason" class="mt-1 text-xs text-orange-600">
+                          延误原因: {{ segment.delayReason }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="boxAcceptanceMap.get(box.id)" class="mt-3 p-3 bg-gray-50 rounded-lg">
+                  <div class="text-xs font-semibold text-gray-600 mb-2">验收结果</div>
+                  <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <span class="text-gray-500">发货数量:</span>
+                      <span class="ml-2 text-gray-800">{{ boxAcceptanceMap.get(box.id)?.sentQty }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500">实收数量:</span>
+                      <span class="ml-2 text-gray-800">{{ boxAcceptanceMap.get(box.id)?.receivedQty }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500">封签完整:</span>
+                      <span class="ml-2" :class="boxAcceptanceMap.get(box.id)?.sealIntact ? 'text-green-600' : 'text-red-600'">
+                        {{ boxAcceptanceMap.get(box.id)?.sealIntact ? '是' : '否' }}
+                      </span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500">温度正常:</span>
+                      <span class="ml-2" :class="boxAcceptanceMap.get(box.id)?.tempCurveOk ? 'text-green-600' : 'text-red-600'">
+                        {{ boxAcceptanceMap.get(box.id)?.tempCurveOk ? '是' : '否' }}
+                      </span>
+                    </div>
+                    <div class="col-span-2">
+                      <span class="text-gray-500">验收状态:</span>
+                      <StatusBadge
+                        :status="boxAcceptanceMap.get(box.id)?.status || 'pending'"
+                        :status-map="ACCEPTANCE_STATUS_MAP"
+                        size="sm"
+                        class="ml-2"
+                      />
+                    </div>
+                    <div v-if="boxAcceptanceMap.get(box.id)?.rejectionReason" class="col-span-2">
+                      <span class="text-gray-500">拒收原因:</span>
+                      <span class="ml-2 text-red-600">{{ boxAcceptanceMap.get(box.id)?.rejectionReason }}</span>
+                    </div>
+                    <div v-if="boxAcceptanceMap.get(box.id)?.exceptionResponsibility" class="col-span-2">
+                      <span class="text-gray-500">异常责任:</span>
+                      <span class="ml-2 text-orange-600">{{ boxAcceptanceMap.get(box.id)?.exceptionResponsibility }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

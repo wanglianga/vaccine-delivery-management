@@ -11,6 +11,9 @@ import type {
   DistributionRecommendation,
   SkippedBatchReview,
   BatchAdjustmentRecord,
+  ColdChainBox,
+  TransitSegment,
+  BoxAcceptanceRecord,
 } from '@/types'
 import {
   mockBatches,
@@ -224,6 +227,81 @@ function mapAdjustmentRecord(raw: any): BatchAdjustmentRecord {
     adjustedBy: raw.adjustedBy,
     affectedClinics: raw.affectedClinics,
     createdAt: raw.createdAt,
+  }
+}
+
+function mapColdChainBox(raw: any): ColdChainBox {
+  return {
+    id: String(raw.id),
+    boxNo: raw.boxNo,
+    distributionOrderId: String(raw.distributionOrderId),
+    orderNo: raw.orderNo,
+    batchId: String(raw.batchId),
+    batchNo: raw.batchNo,
+    vaccineName: raw.vaccineName,
+    quantity: raw.quantity,
+    tempProbeNo: raw.tempProbeNo,
+    sealNo: raw.sealNo,
+    targetClinic: raw.targetClinic,
+    currentVehicleNo: raw.currentVehicleNo,
+    currentDriverName: raw.currentDriverName,
+    currentDriverPhone: raw.currentDriverPhone,
+    transferPoint: raw.transferPoint,
+    estimatedArrivalTime: raw.estimatedArrivalTime,
+    actualArrivalTime: raw.actualArrivalTime,
+    status: raw.status?.toLowerCase() || 'pending',
+    exceptionRemark: raw.exceptionRemark,
+    responsibleParty: raw.responsibleParty,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  }
+}
+
+function mapTransitSegment(raw: any): TransitSegment {
+  return {
+    id: String(raw.id),
+    boxId: String(raw.boxId),
+    boxNo: raw.boxNo,
+    distributionOrderId: String(raw.distributionOrderId),
+    orderNo: raw.orderNo,
+    segmentOrder: raw.segmentOrder,
+    fromPoint: raw.fromPoint,
+    toPoint: raw.toPoint,
+    vehicleNo: raw.vehicleNo,
+    driverName: raw.driverName,
+    driverPhone: raw.driverPhone,
+    departTime: raw.departTime,
+    estimatedArrivalTime: raw.estimatedArrivalTime,
+    actualArrivalTime: raw.actualArrivalTime,
+    status: raw.status?.toLowerCase() || 'pending',
+    delayReason: raw.delayReason,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  }
+}
+
+function mapBoxAcceptance(raw: any): BoxAcceptanceRecord {
+  return {
+    id: String(raw.id),
+    boxId: String(raw.boxId),
+    boxNo: raw.boxNo,
+    distributionOrderId: String(raw.distributionOrderId),
+    orderNo: raw.orderNo,
+    batchNo: raw.batchNo,
+    vaccineName: raw.vaccineName,
+    sentQty: raw.sentQty,
+    receivedQty: raw.receivedQty,
+    sealIntact: raw.sealIntact,
+    tempCurveOk: raw.tempCurveOk,
+    arrivalTime: raw.arrivalTime,
+    status: raw.status?.toLowerCase() || 'pending',
+    rejectionReason: raw.rejectionReason,
+    exceptionResponsibility: raw.exceptionResponsibility,
+    returnTaskId: raw.returnTaskId ? String(raw.returnTaskId) : null,
+    warehouseConfirmedQty: raw.warehouseConfirmedQty,
+    clinicConfirmedQty: raw.clinicConfirmedQty,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
   }
 }
 
@@ -665,6 +743,116 @@ export function useApi() {
     return mapBatch(raw)
   }
 
+  async function getColdChainBoxes(batchId?: string, orderId?: string): Promise<ColdChainBox[]> {
+    const useReal = await checkBackend()
+    if (!useReal) return []
+    try {
+      let url = '/cold-chain-boxes'
+      const params = new URLSearchParams()
+      if (batchId) params.append('batchId', batchId)
+      if (orderId) params.append('orderId', orderId)
+      if (params.toString()) url += '?' + params.toString()
+      const raw = await fetchJson<any[]>(url)
+      return raw.map(mapColdChainBox)
+    } catch {
+      return []
+    }
+  }
+
+  async function getColdChainBox(id: string): Promise<ColdChainBox> {
+    const raw = await fetchJson<any>(`/cold-chain-boxes/${id}`)
+    return mapColdChainBox(raw)
+  }
+
+  async function getBoxSegments(boxId: string): Promise<TransitSegment[]> {
+    const raw = await fetchJson<any[]>(`/cold-chain-boxes/${boxId}/segments`)
+    return raw.map(mapTransitSegment)
+  }
+
+  async function getBoxAcceptance(boxId: string): Promise<BoxAcceptanceRecord> {
+    const raw = await fetchJson<any>(`/cold-chain-boxes/${boxId}/acceptance`)
+    return mapBoxAcceptance(raw)
+  }
+
+  async function splitBatch(request: {
+    batchId: string
+    boxes: Array<{
+      quantity: number
+      coldChainBoxNo: string
+      tempProbeNo: string
+      sealNo: string
+      vehicleNo: string
+      driverName: string
+      driverPhone: string
+      targetClinic: string
+      estimatedArrivalTime?: string
+      transferPoint?: string
+    }>
+  }): Promise<ColdChainBox[]> {
+    const raw = await postJson<any[]>('/cold-chain-boxes/split', {
+      batchId: Number(request.batchId),
+      boxes: request.boxes,
+    })
+    return raw.map(mapColdChainBox)
+  }
+
+  async function transferBox(request: {
+    boxId: string
+    fromPoint: string
+    toPoint: string
+    newVehicleNo: string
+    newDriverName: string
+    newDriverPhone: string
+    transferRemark?: string
+  }): Promise<TransitSegment> {
+    const raw = await postJson<any>('/cold-chain-boxes/transfer', {
+      boxId: Number(request.boxId),
+      fromPoint: request.fromPoint,
+      toPoint: request.toPoint,
+      newVehicleNo: request.newVehicleNo,
+      newDriverName: request.newDriverName,
+      newDriverPhone: request.newDriverPhone,
+      transferRemark: request.transferRemark,
+    })
+    return mapTransitSegment(raw)
+  }
+
+  async function acceptBox(boxId: string, request: {
+    receivedQty: number
+    sealIntact: boolean
+    tempCurveOk: boolean
+    exceptionResponsibility?: string
+  }): Promise<BoxAcceptanceRecord> {
+    const raw = await postJson<any>(`/cold-chain-boxes/${boxId}/accept`, request)
+    return mapBoxAcceptance(raw)
+  }
+
+  async function rejectBox(boxId: string, request: {
+    rejectionReason: string
+    exceptionResponsibility?: string
+  }): Promise<BoxAcceptanceRecord> {
+    const raw = await postJson<any>(`/cold-chain-boxes/${boxId}/reject`, request)
+    return mapBoxAcceptance(raw)
+  }
+
+  async function updateBoxStatus(boxId: string, request: {
+    status: string
+    remark?: string
+    responsibleParty?: string
+  }): Promise<ColdChainBox> {
+    const raw = await putJson<any>(`/cold-chain-boxes/${boxId}/status`, request)
+    return mapColdChainBox(raw)
+  }
+
+  async function markVehicleDelayed(vehicleNo: string, delayReason: string): Promise<void> {
+    await postJson<any>('/cold-chain-boxes/mark-vehicle-delayed', { vehicleNo, delayReason })
+  }
+
+  async function getDelayedBoxes(): Promise<ColdChainBox[]> {
+    const raw = await fetchJson<any[]>('/cold-chain-boxes/delayed')
+    return raw.map(mapColdChainBox)
+  }
+
   return {
     loading,
     error,
@@ -690,5 +878,16 @@ export function useApi() {
     reviewSkippedBatch,
     getBatchAdjustmentRecords,
     updateBatchStatus,
+    getColdChainBoxes,
+    getColdChainBox,
+    getBoxSegments,
+    getBoxAcceptance,
+    splitBatch,
+    transferBox,
+    acceptBox,
+    rejectBox,
+    updateBoxStatus,
+    markVehicleDelayed,
+    getDelayedBoxes,
   }
 }

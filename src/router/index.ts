@@ -11,6 +11,11 @@ const routes = [
     component: () => import('@/pages/BatchPage.vue'),
   },
   {
+    path: '/split',
+    name: 'split',
+    component: () => import('@/pages/SplitPage.vue'),
+  },
+  {
     path: '/distribution',
     name: 'distribution',
     component: () => import('@/pages/DistributionPage.vue'),

@@ -223,6 +223,99 @@ export interface BatchAdjustmentRecord {
   createdAt: string
 }
 
+export type BoxStatus = 'pending' | 'outbound' | 'in_transit' | 'transferring' | 'arrived' | 'accepted' | 'rejected' | 'delayed' | 'returned'
+
+export const BOX_STATUS_MAP: Record<BoxStatus, { label: string; color: string }> = {
+  pending: { label: '待出库', color: 'gray' },
+  outbound: { label: '已出库', color: 'blue' },
+  in_transit: { label: '在途', color: 'yellow' },
+  transferring: { label: '转运中', color: 'purple' },
+  arrived: { label: '已到达', color: 'indigo' },
+  accepted: { label: '已验收', color: 'green' },
+  rejected: { label: '已拒收', color: 'red' },
+  delayed: { label: '延误', color: 'orange' },
+  returned: { label: '已回库', color: 'pink' },
+}
+
+export interface ColdChainBox {
+  id: string
+  boxNo: string
+  distributionOrderId: string
+  orderNo: string
+  batchId: string
+  batchNo: string
+  vaccineName: string
+  quantity: number
+  tempProbeNo: string
+  sealNo: string
+  targetClinic: string
+  currentVehicleNo?: string
+  currentDriverName?: string
+  currentDriverPhone?: string
+  transferPoint?: string
+  estimatedArrivalTime?: string
+  actualArrivalTime?: string
+  status: BoxStatus
+  exceptionRemark?: string
+  responsibleParty?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type SegmentStatus = 'pending' | 'in_progress' | 'completed' | 'delayed' | 'cancelled'
+
+export const SEGMENT_STATUS_MAP: Record<SegmentStatus, { label: string; color: string }> = {
+  pending: { label: '待出发', color: 'gray' },
+  in_progress: { label: '进行中', color: 'blue' },
+  completed: { label: '已完成', color: 'green' },
+  delayed: { label: '延误', color: 'orange' },
+  cancelled: { label: '已取消', color: 'red' },
+}
+
+export interface TransitSegment {
+  id: string
+  boxId: string
+  boxNo: string
+  distributionOrderId: string
+  orderNo: string
+  segmentOrder?: number
+  fromPoint: string
+  toPoint: string
+  vehicleNo: string
+  driverName: string
+  driverPhone: string
+  departTime?: string
+  estimatedArrivalTime?: string
+  actualArrivalTime?: string
+  status: SegmentStatus
+  delayReason?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface BoxAcceptanceRecord {
+  id: string
+  boxId: string
+  boxNo: string
+  distributionOrderId: string
+  orderNo: string
+  batchNo: string
+  vaccineName: string
+  sentQty: number
+  receivedQty: number
+  sealIntact: boolean
+  tempCurveOk: boolean
+  arrivalTime?: string
+  status: AcceptanceRecord['status']
+  rejectionReason?: string
+  exceptionResponsibility?: string
+  returnTaskId?: string
+  warehouseConfirmedQty?: number
+  clinicConfirmedQty?: number
+  createdAt: string
+  updatedAt: string
+}
+
 export const BATCH_STATUS_MAP: Record<VaccineBatch['status'], { label: string; color: string }> = {
   available: { label: '可配送', color: 'green' },
   partial: { label: '部分配送', color: 'yellow' },
